@@ -1,31 +1,28 @@
 #!/usr/bin/env node
-import { performance, PerformanceObserver, PerformanceEntry, createHistogram } from 'perf_hooks';
-import fetch from 'node-fetch';
 
-const ENDPOINT = 'https://001.land/50m.data'
-const EXPECTED_SIZE = 50 * 1024 * 1024;
+import fetch from 'node-fetch';
+import { performance, PerformanceObserver, PerformanceEntry } from 'perf_hooks';
 
 // Conversion factor from bytes per millisecond to megabits per second
 const CONVERSION_FACTOR = 0.008
 
 // Resolution of measurements
-const RESOLUTION = 1024 * 1024;
+let RESOLUTION = 1024 * 1024;
 
 // Fixed buffer size of node-fetch https requests
 const BUFFER_SIZE = 16 * 1024;
 
-const runMeasurement = async () => {
-    const response = await fetch(ENDPOINT, { compress: false });
+const runMeasurement = async (url: string) => {
+    const response = await fetch(url, { compress: false });
 
     if (!response || !response.ok || !response.body) {
         throw new Error('Invalid response body');
     }
 
     const contentLength = response.headers.get('Content-Length');
-    if (!contentLength || parseInt(contentLength, 10) !== EXPECTED_SIZE) {
-        throw new Error(
-            `Did not receive a response with the expected length ${EXPECTED_SIZE}`
-        );
+    if(!contentLength || parseInt(contentLength, 10) < 6 * RESOLUTION) {
+        console.error('This payload is too small (min 6 megabyte)');
+        process.exit(1);
     }
 
     let index = 0;
@@ -48,8 +45,13 @@ const getSpeed = (result: PerformanceEntry): number => {
     return CONVERSION_FACTOR * RESOLUTION / result.duration;
 }
 
-const run = async (): Promise<number> => {
+const run = async (url: string): Promise<number> => {
     const measurements: number[] = [];
+
+    if (!url.startsWith('http')) {
+        url = `https://${url}`;
+    }
+
     const obs = new PerformanceObserver((items) => {
         items.getEntriesByName('received-data').forEach((entry) => {
             measurements.push(getSpeed(entry))
@@ -58,7 +60,7 @@ const run = async (): Promise<number> => {
     })
     obs.observe({ type: 'measure' });
     try {
-        await runMeasurement();
+        await runMeasurement(url);
     } catch (err) {
         console.error('Measurement failed');
         console.error(err);
@@ -74,12 +76,14 @@ const run = async (): Promise<number> => {
     return average;
 }
 
-const main = () => {
-    const runAndLog = async () => {
-        const currentSpeed = await run();
-        console.log(`${new Date().toLocaleTimeString()}: ${currentSpeed}mps`)
-        setTimeout(runAndLog, 15 * 60 * 1000);
+const main = async () => {
+    const url = process.argv[2];
+    if (!url || url.length === 0) {
+        console.error('Usage: speedmon <https://payload.url>')
+        console.error('Payload should be larger than 6 megabytes')
+        process.exit(1);
     }
-    runAndLog()
+    const currentSpeed = await run(url);
+    console.log(`${currentSpeed}mps`)
 }
 main();
