@@ -1,0 +1,16 @@
+{
+  "extends": "ts-node/node12/tsconfig.json",
+  "ts-node": {
+    "transpileOnly": true,
+  },
+  "compilerOptions": {
+    "target": "ES2015",
+    "module": "ESNext",
+    "noImplicitAny": false,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "outDir": "./build"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"]
+}
